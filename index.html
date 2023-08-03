@@ -197,7 +197,7 @@
 
                 const layers = arr.map((json, key) => {
                     const layerName = spreadsheets[key].name
-                    const color = colorArray[key]
+                    const color = 'red'
                     return buildData(json, layerName, color)
                 })
 
@@ -232,8 +232,9 @@
                 'type': 'geojson',
                 'data': turf.featureCollection([])
             });
+
             map.addLayer({
-                'id': 'main',
+                'id': 'circles',
                 'type': 'circle',
                 'source': 'main',
                 'paint': {
@@ -244,25 +245,7 @@
                 }
             });
 
-            //add text 
-
-            // map.addLayer({
-            //     'id': 'main-text',
-            //     'type': 'symbol',
-            //     'source': 'main',
-            //     'layout': {
-            //         'text-field': ['get', 'numberOfProperties'],
-            //         'text-font': [
-            //             'Open Sans Semibold',
-            //             'Arial Unicode MS Bold'
-            //         ],
-            //     },
-            //     'paint': {
-            //         'text-color': 'black'
-            //     }
-            // });
-
-            map.on('click', 'main', (e) => {
+            map.on('click', 'circles', (e) => {
                 // Copy coordinates array.
                 const coordinates = e.features[0].geometry.coordinates.slice();
                 const data = e.features[0].properties;
@@ -275,6 +258,8 @@
                 }
                 console.log('data', data);
 
+                const id = e.features[0].properties.id
+
                 const fields = fieldsToDisplay.map(d => {
                     if (data[d]) {
                         return `<div><strong>${d}</strong>: ${data[d]}</div>`
@@ -282,28 +267,36 @@
                     return ""
                 }).join("")
 
-                // const description = `
-                //     <div>
-                //         <div>Full Addrees: ${data['Full Addrees']}</div>
-                //         <div>Evaluation: ${data['Evaluation']}</div>
-                //     </div >
-                // `
                 const description = `<div>${fields}</div>`
                 new mapboxgl.Popup()
                     .setLngLat(coordinates)
                     .setHTML(description)
                     .addTo(map);
+
+                //hightlight the pins 
+                // const bounds = new mapboxgl.LngLatBounds();
+                // const pins = main.data[0].data.filter(d => d.properties.id === id).map(d => {
+                //     bounds.extend(d.geometry.coordinates)
+                // })
+                // map.fitBounds(bounds, { padding: 150 })
+
+                if (id !== "") {
+                    map.setPaintProperty('circles', 'circle-color', ['match', ['get', 'id'], id, 'blue', 'red']);
+                }
+
             });
 
-            map.on('mousemove', 'main', e => {
+            map.on('mousemove', 'circles', e => {
                 map.getCanvas().style.cursor = 'pointer';
             })
 
-            map.on('mouseleave', 'main', () => {
+            map.on('mouseleave', 'circles', () => {
                 map.getCanvas().style.cursor = '';
             });
 
         });
+
+
 
         switchersEnableDiv.appendChild(buildSwitcher("Satellite", checked => {
             const display = checked ? "visible" : "none"
@@ -331,11 +324,13 @@
             const pins = json
                 .map(pin => {
                     const { lat, lon, type } = pin
-                    const colorIndex = Array.from(main.filters).indexOf(type)
+                    // const colorIndex = Array.from(main.filters).indexOf(type)
                     bounds.extend([lon, lat])
 
+                    const id = `${pin['Nom']}${pin['Prenom']}`;
+
                     const numberOfProperties =
-                        names.filter(name => name === `${pin['Nom']}${pin['Prenom']}`).length
+                        names.filter(name => name === id).length
 
                     const radius = numberOfProperties > 1 ? numberOfProperties * 2 + 5 : 5
 
@@ -343,7 +338,8 @@
                         color,
                         name,
                         type,
-                        radius,
+                        id,
+                        radius: radius > 15 ? 15 : radius,
                         numberOfProperties: numberOfProperties > 1 ? numberOfProperties : "",
                         ...pin
                     });
@@ -351,9 +347,6 @@
 
             main.data.push({ layer: layerName, data: pins })
             map.fitBounds(bounds, { padding: 50 })
-
-
-
 
             return pins
         }
