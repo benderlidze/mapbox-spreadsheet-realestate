@@ -246,21 +246,21 @@
 
             //add text 
 
-            map.addLayer({
-                'id': 'main-text',
-                'type': 'symbol',
-                'source': 'main',
-                'layout': {
-                    'text-field': ['get', 'numberOfProperties'],
-                    'text-font': [
-                        'Open Sans Semibold',
-                        'Arial Unicode MS Bold'
-                    ],
-                },
-                'paint': {
-                    'text-color': 'black'
-                }
-            });
+            // map.addLayer({
+            //     'id': 'main-text',
+            //     'type': 'symbol',
+            //     'source': 'main',
+            //     'layout': {
+            //         'text-field': ['get', 'numberOfProperties'],
+            //         'text-font': [
+            //             'Open Sans Semibold',
+            //             'Arial Unicode MS Bold'
+            //         ],
+            //     },
+            //     'paint': {
+            //         'text-color': 'black'
+            //     }
+            // });
 
             map.on('click', 'main', (e) => {
                 // Copy coordinates array.
