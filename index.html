@@ -204,7 +204,6 @@
                 map.getSource("main")
                     .setData(turf.featureCollection(main.data.map(d => d.data).flat()))
 
-
                 main.data.map(d => {
                     main.filters.add(d.layer)
                     switchersEnableDiv.appendChild(buildSwitcher(d.layer, checked => {
@@ -238,10 +237,28 @@
                 'type': 'circle',
                 'source': 'main',
                 'paint': {
-                    'circle-radius': 6,
+                    'circle-radius': ['get', 'radius'],
                     'circle-color': ['get', 'color'],
                     "circle-stroke-color": "white",
                     "circle-stroke-width": 2
+                }
+            });
+
+            //add text 
+
+            map.addLayer({
+                'id': 'main-text',
+                'type': 'symbol',
+                'source': 'main',
+                'layout': {
+                    'text-field': ['get', 'numberOfProperties'],
+                    'text-font': [
+                        'Open Sans Semibold',
+                        'Arial Unicode MS Bold'
+                    ],
+                },
+                'paint': {
+                    'text-color': 'black'
                 }
             });
 
@@ -303,20 +320,36 @@
 
             console.log('json', json);
             const bounds = new mapboxgl.LngLatBounds();
+
+
+            const names = json.map(d => {
+                return `${d['Nom']}${d['Prenom']}`
+            }).filter(d => d !== "")
+
+            console.log('names', names);
+
             const pins = json
                 .map(pin => {
                     const { lat, lon, type } = pin
                     const colorIndex = Array.from(main.filters).indexOf(type)
                     bounds.extend([lon, lat])
+
+                    const numberOfProperties =
+                        names.filter(name => name === `${pin['Nom']}${pin['Prenom']}`).length
+
+                    const radius = numberOfProperties > 1 ? numberOfProperties * 2 + 5 : 5
+
                     return turf.point([lon, lat], {
                         color,
                         name,
                         type,
+                        radius,
+                        numberOfProperties: numberOfProperties > 1 ? numberOfProperties : "",
                         ...pin
                     });
                 });
-            main.data.push({ layer: layerName, data: pins })
 
+            main.data.push({ layer: layerName, data: pins })
             map.fitBounds(bounds, { padding: 50 })
 
 
