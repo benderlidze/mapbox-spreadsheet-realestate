@@ -117,6 +117,12 @@
             left: 50%;
             transform: translate(-50%, -50%);
         }
+
+        switcher-div {
+            display: flex;
+            align-items: center;
+            margin: 5px;
+        }
     </style>
 </head>
 
@@ -138,9 +144,16 @@
             style: 'mapbox://styles/mapbox/streets-v11'
         });
 
+
         const main = {
             data: [],
-            filters: new Set()
+            filters: new Proxy({ enabled: false, filter: "" }, {
+                set: function (target, key, value) {
+                    target[key] = value;
+                    applyFilters()
+                    return true;
+                },
+            })
         };
 
         const colorArray = ['red', '#00B3E6',
@@ -189,46 +202,15 @@
                 "Ville"
             ]
 
-            const spreadsheets = [
-                { name: "Canada spreadsheet", link: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQSuIM4Zp38Rr11BIvKLZZAoyltz5zNucO-wRPq0nQi1PEshAemXQxvuyiDffYoPm69jX-zY2lP7DaY/pub?output=csv' },
-            ]
 
-            Promise.all(
-                spreadsheets.map(d => d3.csv(d.link))
-            ).then(arr => {
-
-                const layers = arr.map((json, key) => {
-                    const layerName = spreadsheets[key].name
-                    const color = 'red'
-                    return buildData(json, layerName, color)
+            d3.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vQSuIM4Zp38Rr11BIvKLZZAoyltz5zNucO-wRPq0nQi1PEshAemXQxvuyiDffYoPm69jX-zY2lP7DaY/pub?output=csv")
+                .then(data => {
+                    console.log('data', data);
+                    const pins = buildData(data, "canada", "red")
+                    const featureCollection = turf.featureCollection(pins)
+                    map.getSource("main").setData(featureCollection)
+                    loading.style.display = "none"
                 })
-
-                map.getSource("main")
-                    .setData(turf.featureCollection(main.data.map(d => d.data).flat()))
-
-                main.data.map(d => {
-                    main.filters.add(d.layer)
-                    switchersEnableDiv.appendChild(buildSwitcher(d.layer, checked => {
-                        if (checked) {
-                            main.filters.add(d.layer)
-                        } else {
-                            main.filters.delete(d.layer)
-                        }
-                        //update pins 
-                        const filteredPins = main.data.filter(d => main.filters.has(d.layer)).map(d => d.data).flat()
-                        map.getSource("main").setData(turf.featureCollection(filteredPins))
-
-                    }, true))
-                })
-                
-                // switchersEnableDiv.appendChild(buildSwitcher("Satellite", checked => {
-                //     const display = checked ? "visible" : "none"
-                //     map.setLayoutProperty('satellite', 'visibility', display);
-                // }, false))
-                // map.getSource("main").setData(turf.featureCollection(pins))
-
-                loading.style.display = "none"
-            })
 
             map.addSource('main', {
                 'type': 'geojson',
@@ -275,13 +257,6 @@
                     .setHTML(description)
                     .addTo(map);
 
-                //hightlight the pins 
-                // const bounds = new mapboxgl.LngLatBounds();
-                // const pins = main.data[0].data.filter(d => d.properties.id === id).map(d => {
-                //     bounds.extend(d.geometry.coordinates)
-                // })
-                // map.fitBounds(bounds, { padding: 150 })
-
                 if (id !== "") {
                     map.setPaintProperty('circles', 'circle-color', ['match', ['get', 'id'], id, 'blue', 'red']);
                 }
@@ -298,51 +273,85 @@
 
         });
 
+        const satelliteText = document.createElement("span")
+        satelliteText.innerText = "Satellite"
 
-        const selector = document.createElement("select")
-        selector.addEventListener("change", () => {
-            const value = selector.value
-            const pins = main.data.filter(d => d.layer === value).map(d => d.data).flat()
-            map.getSource("main").setData(turf.featureCollection(pins))
-        })
-
-
-        switchersEnableDiv.appendChild(buildSwitcher("Satellite", checked => {
+        switchersEnableDiv.appendChild(buildSwitcher(satelliteText, checked => {
             const display = checked ? "visible" : "none"
             map.setLayoutProperty('satellite', 'visibility', display);
         }, false))
 
-        function buildData(json, layerName, color) {
 
+        const conditionFilter = buildConditionFilter()
+        switchersEnableDiv.appendChild(buildSwitcher(conditionFilter, checked => {
+            if (checked) {
+                main.filters.enabled = true
+            } else {
+                main.filters.enabled = false
+            }
+        }, false))
+
+        function applyFilters() {
+            if (!main.filters.enabled) {
+                map.setFilter('circles', null);
+                return;
+            }
+            map.setFilter('circles', main.filters.condition);
+        }
+
+        function buildConditionFilter() {
+
+            const div = document.createElement("div")
+            div.className = "switcher-div"
+
+            const select = document.createElement("select")
+            select.options.add(new Option(">", ">"))
+            select.options.add(new Option("=", "=="))
+            select.addEventListener("change", filter)
+
+            div.appendChild(select)
+
+            const input = document.createElement("input")
+            input.type = "number"
+            input.value = 0
+            input.style.width = "50px"
+            input.addEventListener("input", filter)
+            div.appendChild(input)
+
+            //switchersEnableDiv.appendChild(div)
+
+            function filter() {
+                const condition = select.value
+                const number = +input.value
+                console.log("!!!!", condition, number);
+                //map.setFilter('circles', [condition, ['get', 'Nombre Logements'], number]);
+                main.filters.condition = [condition, ['get', 'Nombre Logements'], number]
+            }
+
+            return div
+        }
+
+
+
+        function buildData(json, layerName, color) {
             json
                 .forEach(d => {
                     d.lat = +d['Latitude']
                     d.lon = +d['Longitude']
                 })
-
-            console.log('json', json);
             const bounds = new mapboxgl.LngLatBounds();
-
-
             const names = json.map(d => {
                 return `${d['Nom']}${d['Prenom']}`
             }).filter(d => d !== "")
-
-            console.log('names', names);
-
             const pins = json
                 .map(pin => {
                     const { lat, lon, type } = pin
                     // const colorIndex = Array.from(main.filters).indexOf(type)
                     bounds.extend([lon, lat])
-
                     const id = `${pin['Nom']}${pin['Prenom']}`;
-
                     const numberOfProperties =
                         names.filter(name => name === id).length
-
                     const radius = numberOfProperties > 1 ? numberOfProperties * 2 + 5 : 5
-
                     return turf.point([lon, lat], {
                         color,
                         name,
@@ -350,13 +359,14 @@
                         id,
                         radius: radius > 15 ? 15 : radius,
                         numberOfProperties: numberOfProperties > 1 ? numberOfProperties : "",
-                        ...pin
+                        ...pin,
+                        'Nombre Logements': +pin['Nombre Logements'],
                     });
                 });
+            console.log('pins==>', pins);
 
-            main.data.push({ layer: layerName, data: pins })
+            main.data.push(...pins)
             map.fitBounds(bounds, { padding: 50 })
-
             return pins
         }
 
@@ -368,34 +378,7 @@
             map.getSource("main").setData(turf.featureCollection(pins))
         }
 
-
-        function buildCheckBox({ initState = "checked", name, callback, labelCallback, plusShow = true, plusCallback, tooltip }) {
-            const div = document.createElement('div');
-            div.className = 'check-item'
-
-            const checkbox = document.createElement('input');
-            checkbox.checked = initState
-            checkbox.dataset.circuit = name
-            checkbox.type = "checkbox";
-            checkbox.name = "name";
-            checkbox.value = "value";
-            checkbox.id = "";
-            checkbox.addEventListener("change", () => {
-                if (typeof callback === "function") callback(checkbox.checked)
-            })
-
-            const label = document.createElement('span')
-            label.htmlFor = "";
-            label.className = 'tooltip-container cooltipz--top cooltipz--static'
-            label.appendChild(document.createTextNode(name));
-
-            div.appendChild(checkbox);
-            div.appendChild(label);
-
-            return div
-        }
-
-        function buildSwitcher(labelText, action, checked = true) {
+        function buildSwitcher(child, action, checked = true) {
 
             const div = document.createElement("div")
             div.className = "switcher-div"
@@ -416,7 +399,7 @@
             span.className = "slider round"
 
             const text = document.createElement("div")
-            text.innerText = labelText
+            text.appendChild(child)
 
             label.appendChild(checkbox)
             label.appendChild(span)

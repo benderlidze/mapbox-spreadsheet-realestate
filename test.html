@@ -156,15 +156,27 @@
 
         map.on('load', () => {
 
-            map.addLayer({
-                id: 'satellite',
-                source: { "type": "raster", "url": "mapbox://mapbox.satellite", "tileSize": 256 },
-                type: "raster",
-                layout: {
-                    visibility: 'none'
-                }
-            }, "tunnel-oneway-arrow-blue", "tunnel-oneway-arrow-white", "turning-feature-outline", "road-oneway-arrow-blue", "level-crossing", "road-oneway-arrow-white", "turning-feature", "bridge-oneway-arrow-blue", "bridge-oneway-arrow-white", "building-number-label", "road-label", "road-number-shield", "road-exit-shield", "golf-hole-label", "waterway-label", "natural-line-label", "natural-point-label", "water-line-label", "water-point-label", "poi-label", "transit-label", "airport-label", "settlement-subdivision-label", "settlement-label", "state-label", "country-label");
-
+            // map.addLayer({
+            //     id: 'satellite',
+            //     source: { "type": "raster", "url": "mapbox://mapbox.satellite", "tileSize": 256 },
+            //     type: "raster",
+            //     layout: {
+            //         visibility: 'none'
+            //     }
+            // });
+            // map.addLayer({
+            //     id: 'satellite-streets',
+            //     source: {
+            //         "type": "raster",
+            //         "url": "mapbox://mapbox.satellite-streets-v12",
+            //         "tileSize": 256
+            //     },
+            //     type: 'raster',
+            //     layout: {
+            //         visibility: 'visible'
+            //     },
+            //     paint: {}
+            // });
 
             const fieldsToDisplay = [
                 "Full Addrees",
@@ -220,12 +232,6 @@
 
                     }, true))
                 })
-                
-                // switchersEnableDiv.appendChild(buildSwitcher("Satellite", checked => {
-                //     const display = checked ? "visible" : "none"
-                //     map.setLayoutProperty('satellite', 'visibility', display);
-                // }, false))
-                // map.getSource("main").setData(turf.featureCollection(pins))
 
                 loading.style.display = "none"
             })
@@ -298,19 +304,19 @@
 
         });
 
-
-        const selector = document.createElement("select")
-        selector.addEventListener("change", () => {
-            const value = selector.value
-            const pins = main.data.filter(d => d.layer === value).map(d => d.data).flat()
-            map.getSource("main").setData(turf.featureCollection(pins))
-        })
-
-
         switchersEnableDiv.appendChild(buildSwitcher("Satellite", checked => {
-            const display = checked ? "visible" : "none"
-            map.setLayoutProperty('satellite', 'visibility', display);
+            if (checked) {
+                map.setStyle('mapbox://styles/mapbox/satellite-streets-v12');
+            } else {
+                map.setStyle('mapbox://styles/mapbox/streets-v11');
+            }
+            rebuildGeometry()
+
         }, false))
+
+        function rebuildGeometry() {
+
+        }
 
         function buildData(json, layerName, color) {
 
