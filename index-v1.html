@@ -341,14 +341,14 @@
                 })
             const bounds = new mapboxgl.LngLatBounds();
             const names = json.map(d => {
-                return `${d['Nom']}${d['Prenom']}`
+                return `${d['Owner Name']}`
             }).filter(d => d !== "")
             const pins = json
                 .map(pin => {
                     const { lat, lon, type } = pin
                     // const colorIndex = Array.from(main.filters).indexOf(type)
                     bounds.extend([lon, lat])
-                    const id = `${pin['Nom']}${pin['Prenom']}`;
+                    const id = `${pin['Owner Name']}`;
                     const numberOfProperties =
                         names.filter(name => name === id).length
                     const radius = numberOfProperties > 1 ? numberOfProperties * 2 + 5 : 5
