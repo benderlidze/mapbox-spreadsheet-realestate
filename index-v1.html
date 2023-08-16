@@ -203,7 +203,7 @@
             ]
 
 
-            d3.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vQSuIM4Zp38Rr11BIvKLZZAoyltz5zNucO-wRPq0nQi1PEshAemXQxvuyiDffYoPm69jX-zY2lP7DaY/pub?output=csv")
+            d3.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vQBic_RSTNOJFxogzyIBWSeko-kfu_DsTM8k_V53vyTh6fDI975q2vMM5iCJCfOhY_UHqTo_eK4LCNx/pub?output=csv")
                 .then(data => {
                     console.log('data', data);
                     const pins = buildData(data, "canada", "red")
