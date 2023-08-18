@@ -180,6 +180,7 @@
 
 
             const fieldsToDisplay = [
+                "Address",
                 "Owner Name",
                 "Full Addrees",
                 "Evaluation",
@@ -299,16 +300,22 @@
                 return;
             }
             //map.setFilter('circles', main.filters.condition);
-            const pins = main.data.filter(pin => {
-                const NL = +pin.properties['Nombre Logements']
-                const NAL = +pin.properties['Nombre Autres Locaux']
-                if (main.filters.condition.sign === ">") {
-                    return NL + NAL > main.filters.condition.number
-                }
-                if (main.filters.condition.sign === "==") {
-                    return NL + NAL === main.filters.condition.number
-                }
-            })
+            const pins = main.data
+                .filter(pin => {
+                    if (!main.filters.condition) return;
+                    const NL = +pin.properties['Nombre Logements']
+                    const NAL = +pin.properties['Nombre Autres Locaux']
+                    if (main.filters.condition.sign === ">") {
+                        return NL + NAL > main.filters.condition.number
+                    }
+                    if (main.filters.condition.sign === "==") {
+                        return NL + NAL === main.filters.condition.number
+                    }
+                    if (main.filters.condition.sign === "<") {
+                        return NL + NAL < main.filters.condition.number
+                    }
+                })
+
             map.getSource("main").setData(turf.featureCollection(pins))
 
         }
@@ -321,6 +328,7 @@
             const select = document.createElement("select")
             select.options.add(new Option(">", ">"))
             select.options.add(new Option("=", "=="))
+            select.options.add(new Option("<", "<"))
             select.addEventListener("change", filter)
 
             div.appendChild(select)
@@ -333,15 +341,12 @@
             div.appendChild(input)
 
             //switchersEnableDiv.appendChild(div)
-
             function filter() {
                 const condition = select.value
                 const number = +input.value
                 console.log("!!!!", condition, number);
-                //map.setFilter('circles', [condition, ['get', 'Nombre Logements'], number]);
                 main.filters.condition = { sign: condition, number }
             }
-
             return div
         }
 

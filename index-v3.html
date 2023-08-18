@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Add a raster image to a map layer</title>
+    <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.10.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.10.0/mapbox-gl.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        #filters {
+            background-color: white;
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            border-radius: 20px;
+            z-index: 10;
+            padding: 10px;
+        }
+
+        .switcher-div {
+            display: flex;
+            align-items: center;
+            margin: 5px;
+        }
+
+        .switcher-div>div {
+            margin-left: 5px;
+        }
+
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 35px;
+            height: 15px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            -webkit-transition: 0.4s;
+            transition: 0.4s;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 11px;
+            width: 11px;
+            left: 3px;
+            bottom: 2px;
+            background-color: white;
+            -webkit-transition: 0.4s;
+            transition: 0.4s;
+        }
+
+        input:checked+.slider {
+            background-color: #2196f3;
+        }
+
+        input:focus+.slider {
+            box-shadow: 0 0 1px #2196f3;
+        }
+
+        input:checked+.slider:before {
+            -webkit-transform: translateX(18px);
+            -ms-transform: translateX(18px);
+            transform: translateX(18px);
+        }
+
+        /* Rounded sliders */
+        .slider.round {
+            border-radius: 34px;
+        }
+
+        .slider.round:before {
+            border-radius: 50%;
+        }
+
+        #loading {
+            background-color: white;
+            position: absolute;
+            border-radius: 10px;
+            z-index: 10;
+            padding: 20px;
+            font-size: 20px;
+
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        switcher-div {
+            display: flex;
+            align-items: center;
+            margin: 5px;
+        }
+
+        /*the container must be positioned relative:*/
+        .autocomplete {
+            position: relative;
+            display: inline-block;
+        }
+
+        .autocomplete>input {
+            border: 1px solid transparent;
+            background-color: #f1f1f1;
+            padding: 10px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        .autocomplete>input[type=text] {
+            background-color: #f1f1f1;
+            width: 100%;
+        }
+
+        .autocomplete>input[type=submit] {
+            background-color: DodgerBlue;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .autocomplete-items {
+            position: absolute;
+            border: 1px solid #d4d4d4;
+            border-bottom: none;
+            border-top: none;
+            z-index: 99;
+            /*position the autocomplete items to be the same width as the container:*/
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: calc(100vh - 200px);
+            overflow-y: auto;
+        }
+
+        .autocomplete-items div {
+            padding: 10px;
+            cursor: pointer;
+            background-color: #fff;
+            border-bottom: 1px solid #d4d4d4;
+        }
+
+        /*when hovering an item:*/
+        .autocomplete-items div:hover {
+            background-color: #e9e9e9;
+        }
+
+        /*when navigating through the items using the arrow keys:*/
+        .autocomplete-active {
+            background-color: DodgerBlue !important;
+            color: #ffffff;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loading">Loading data...</div>
+    <div id="filters">
+        <div class="autocomplete" style="width:100%;">
+            <input id="myInput" type="text" name="myCountry" placeholder="Search by Address or Name">
+        </div>
+    </div>
+    <div id="map"></div>
+    <script>
+
+        const switchersEnableDiv = document.getElementById("filters")
+        const loading = document.getElementById("loading")
+
+        mapboxgl.accessToken = 'pk.eyJ1Ijoic2VyZ2JlciIsImEiOiJja3dwOWgzeGQwYWdyMm9xb2pkMDFvYmNuIn0.H9AJ_NLmDNYMed6dvu_Q0A';
+        const map = new mapboxgl.Map({
+            container: 'map',
+            zoom: 5.65,
+            center: { lng: -72.743023, lat: 46.56522602198703 },
+            // Choose from Mapbox's core styles, or make your own style with Mapbox Studio
+            style: 'mapbox://styles/mapbox/streets-v11'
+        });
+        const main = {
+            data: [],
+            filters: []
+        };
+
+        const colorArray = ['red', '#00B3E6',
+            '#E6B333', '#3366E6', '#999966', '#99FF99', '#B34D4D',
+            '#80B300', '#809900', '#E6B3B3', '#6680B3', '#66991A',
+            '#FF99E6', '#CCFF1A', '#FF1A66', '#E6331A', '#33FFCC',
+            '#66994D', '#B366CC', '#4D8000', '#B33300', '#CC80CC',
+            '#66664D', '#991AFF', '#E666FF', '#4DB3FF', '#1AB399',
+            '#E666B3', '#33991A', '#CC9999', '#B3B31A', '#00E680',
+            '#4D8066', '#809980', '#E6FF80', '#1AFF33', '#999933',
+            '#FF3380', '#CCCC00', '#66E64D', '#4D80CC', '#9900B3',
+            '#E64D66', '#4DB380', '#FF4D4D', '#99E6E6', '#6666FF'];
+
+        map.on('load', () => {
+
+            map.addLayer({
+                id: 'satellite',
+                source: { "type": "raster", "url": "mapbox://mapbox.satellite", "tileSize": 256 },
+                type: "raster",
+                layout: {
+                    visibility: 'none'
+                }
+            }, "tunnel-oneway-arrow-blue", "tunnel-oneway-arrow-white", "turning-feature-outline", "road-oneway-arrow-blue", "level-crossing", "road-oneway-arrow-white", "turning-feature", "bridge-oneway-arrow-blue", "bridge-oneway-arrow-white", "building-number-label", "road-label", "road-number-shield", "road-exit-shield", "golf-hole-label", "waterway-label", "natural-line-label", "natural-point-label", "water-line-label", "water-point-label", "poi-label", "transit-label", "airport-label", "settlement-subdivision-label", "settlement-label", "state-label", "country-label");
+
+
+            const fieldsToDisplay = [
+                "Address",
+                "Owner Name",
+                "Full Addrees",
+                "Evaluation",
+                "Contrepartie",
+                "Derniere Transaction",
+                "Nom Transaction",
+                "Categorie Batiment",
+                "Type Construction",
+                "Nombre Logements",
+                "Nombre Autres Locaux",
+                "Nombre Etages",
+                "Annee Construction",
+                "Nom",
+                "Prenom",
+                "No Civique",
+                "Rue",
+                "Arrondissement",
+                "Code Postal",
+                "Adresse",
+                "Province",
+                "Ville"
+            ]
+
+
+            d3.csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vQBic_RSTNOJFxogzyIBWSeko-kfu_DsTM8k_V53vyTh6fDI975q2vMM5iCJCfOhY_UHqTo_eK4LCNx/pub?output=csv")
+                .then(data => {
+                    console.log('data', data);
+                    const pins = buildData(data, "canada", "red")
+                    const featureCollection = turf.featureCollection(pins)
+                    map.getSource("main").setData(featureCollection)
+                    loading.style.display = "none"
+
+                    buildFilters()
+                })
+
+            map.addSource('main', {
+                'type': 'geojson',
+                'data': turf.featureCollection([])
+            });
+
+            map.addLayer({
+                'id': 'circles',
+                'type': 'circle',
+                'source': 'main',
+                'paint': {
+                    'circle-radius': ['get', 'radius'],
+                    'circle-color': ['get', 'color'],
+                    "circle-stroke-color": "white",
+                    "circle-stroke-width": 2
+                }
+            });
+
+            map.on('click', 'circles', (e) => {
+                // Copy coordinates array.
+                const coordinates = e.features[0].geometry.coordinates.slice();
+                const data = e.features[0].properties;
+
+                // Ensure that if the map is zoomed out such that multiple
+                // copies of the feature are visible, the popup appears
+                // over the copy being pointed to.
+                while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+                    coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+                }
+                console.log('data', data);
+
+                const id = e.features[0].properties.id
+
+                const fields = fieldsToDisplay.map(d => {
+                    if (data[d]) {
+                        return `<div><strong>${d}</strong>: ${data[d]}</div>`
+                    }
+                    return ""
+                }).join("")
+
+                const description = `<div>${fields}</div>`
+                new mapboxgl.Popup()
+                    .setLngLat(coordinates)
+                    .setHTML(description)
+                    .addTo(map);
+
+                if (id !== "") {
+                    map.setPaintProperty('circles', 'circle-color', ['match', ['get', 'id'], id, 'blue', 'red']);
+                }
+
+            });
+
+            map.on('mousemove', 'circles', e => {
+                map.getCanvas().style.cursor = 'pointer';
+            })
+
+            map.on('mouseleave', 'circles', () => {
+                map.getCanvas().style.cursor = '';
+            });
+
+        });
+
+        const satelliteText = document.createElement("span")
+        satelliteText.innerText = "Satellite"
+
+        switchersEnableDiv.appendChild(buildSwitcher(satelliteText, checked => {
+            const display = checked ? "visible" : "none"
+            map.setLayoutProperty('satellite', 'visibility', display);
+        }, false))
+
+        const conditionFilterName = "Nombre"
+        const EvaluationFilterName = "Evaluation"
+        const ContrepartieFilterName = "Contrepartie"
+        const DerniereTransactionFilterName = "Derniere Transaction"
+        const CategorieBatimentFilterName = "Categorie Batiment"
+
+        function buildFilters() {
+            const conditionFilter = buildConditionFilter(conditionFilterName)
+            switchersEnableDiv.appendChild(buildSwitcher(conditionFilter, checked => {
+                main.filters.find(d => d.label === conditionFilterName).enabled = checked
+                applyFilters()
+            }, false))
+
+            const EvaluationFilter = buildConditionFilter(EvaluationFilterName, 104400)
+            switchersEnableDiv.appendChild(buildSwitcher(EvaluationFilter, checked => {
+                main.filters.find(d => d.label === EvaluationFilterName).enabled = checked
+                applyFilters()
+            }, false))
+
+            const ContrepartieFilter = buildConditionFilter(ContrepartieFilterName, 700000)
+            switchersEnableDiv.appendChild(buildSwitcher(ContrepartieFilter, checked => {
+                main.filters.find(d => d.label === ContrepartieFilterName).enabled = checked
+                applyFilters()
+            }, false))
+
+            const DerniereTransactionFilter = buildConditionFilter(DerniereTransactionFilterName, 2014)
+            switchersEnableDiv.appendChild(buildSwitcher(DerniereTransactionFilter, checked => {
+                main.filters.find(d => d.label === DerniereTransactionFilterName).enabled = checked
+                applyFilters()
+            }, false))
+
+            const uniqueDataCategorieBatimentFilter = [...new Set(main.data.map(d => d.properties[CategorieBatimentFilterName]))]
+            const CategorieBatimentFilter = buildDropDownFilter(CategorieBatimentFilterName, uniqueDataCategorieBatimentFilter[0], uniqueDataCategorieBatimentFilter)
+            switchersEnableDiv.appendChild(buildSwitcher(CategorieBatimentFilter, checked => {
+                main.filters.find(d => d.label === CategorieBatimentFilterName).enabled = checked
+                applyFilters()
+            }, false))
+        }
+
+
+        function applyFilters() {
+
+            console.log('applyFilters');
+            const NombreFilter = main.filters.find(d => d.label === conditionFilterName)
+            const EvaluationFilter = main.filters.find(d => d.label === EvaluationFilterName)
+            const ContrepartieFilter = main.filters.find(d => d.label === ContrepartieFilterName)
+            const DerniereTransactionFilter = main.filters.find(d => d.label === DerniereTransactionFilterName)
+            const CategorieBatimentFilter = main.filters.find(d => d.label === CategorieBatimentFilterName)
+
+
+            const pins = main.data
+                .filter(pin => {
+                    const filterData = NombreFilter;
+                    if (filterData.enabled) {
+                        //custom
+                        const NL = +pin.properties['Nombre Logements']
+                        const NAL = +pin.properties['Nombre Autres Locaux']
+                        const VALUE = NL + NAL
+                        if (filterData.sign === ">") {
+                            return VALUE > filterData.number
+                        }
+                        if (filterData.sign === "==") {
+                            return VALUE === filterData.number
+                        }
+                        if (filterData.sign === "<") {
+                            return VALUE < filterData.number
+                        }
+                    }
+                    return true
+                })
+                .filter(pin => {
+                    const filterData = EvaluationFilter;
+                    if (filterData.enabled) {
+                        const VALUE = +pin.properties[EvaluationFilterName]
+                        if (filterData.sign === ">") {
+                            return VALUE > filterData.number
+                        }
+                        if (filterData.sign === "==") {
+                            return VALUE === filterData.number
+                        }
+                        if (filterData.sign === "<") {
+                            return VALUE < filterData.number
+                        }
+                    }
+                    return true
+                })
+                .filter(pin => {
+                    const filterData = ContrepartieFilter;
+                    if (filterData.enabled) {
+                        const VALUE = +pin.properties[ContrepartieFilterName]
+                        if (filterData.sign === ">") {
+                            return VALUE > filterData.number
+                        }
+                        if (filterData.sign === "==") {
+                            return VALUE === filterData.number
+                        }
+                        if (filterData.sign === "<") {
+                            return VALUE < filterData.number
+                        }
+                    }
+                    return true
+                })
+                .filter(pin => {
+
+                    const filterData = DerniereTransactionFilter;
+                    if (filterData.enabled) {
+                        const VALUE = +pin.properties[DerniereTransactionFilterName].split("/")[0]
+                        console.log('VALUE', VALUE);
+                        if (!VALUE) return false
+                        if (filterData.sign === ">") {
+                            return VALUE > filterData.number
+                        }
+                        if (filterData.sign === "==") {
+                            return VALUE === filterData.number
+                        }
+                        if (filterData.sign === "<") {
+                            return VALUE < filterData.number
+                        }
+                    }
+                    return true
+                })
+                .filter(pin => {
+
+                    const filterData = CategorieBatimentFilter;
+                    if (filterData.enabled) {
+                        const VALUE = pin.properties[CategorieBatimentFilterName]
+                        console.log('VALUE', VALUE);
+                        if (!VALUE) return false
+                        if (filterData.sign === ">") {
+                            return VALUE > filterData.number
+                        }
+                        if (filterData.sign === "==") {
+                            return VALUE === filterData.number
+                        }
+                        if (filterData.sign === "<") {
+                            return VALUE < filterData.number
+                        }
+                    }
+                    return true
+                })
+
+            map.getSource("main").setData(turf.featureCollection(pins))
+
+        }
+
+        function buildConditionFilter(label, value = 0) {
+
+            const div = document.createElement("div")
+            div.className = "switcher-div"
+            div.textContent = label
+
+            const select = document.createElement("select")
+            select.style.marginLeft = "10px"
+            select.options.add(new Option(">", ">"))
+            select.options.add(new Option("=", "=="))
+            select.options.add(new Option("<", "<"))
+            select.addEventListener("change", filter)
+
+            div.appendChild(select)
+
+            const input = document.createElement("input")
+            input.type = "number"
+            input.value = value
+            input.style.width = "70px"
+            input.addEventListener("input", filter)
+            div.appendChild(input)
+
+            main.filters.push({ label, sign: ">", number: value, enabled: false })
+
+            function filter() {
+                const condition = select.value
+                const number = +input.value
+                console.log("!!!!", condition, number);
+                main.filters.find(d => d.label === label).sign = condition
+                main.filters.find(d => d.label === label).number = number
+                applyFilters()
+            }
+            return div
+        }
+        function buildDropDownFilter(label, value = 0, data) {
+
+            const div = document.createElement("div")
+            div.className = "switcher-div"
+            div.textContent = label
+
+            const select = document.createElement("select")
+            select.style.marginLeft = "10px"
+            data.forEach(d => {
+                select.options.add(new Option(d, d))
+            })
+            select.addEventListener("change", filter)
+
+            div.appendChild(select)
+
+            main.filters.push({ label, sign: "==", number: value, enabled: false })
+
+            function filter() {
+                const condition = "=="
+                const number = select.value
+                console.log("!!!!", condition, number);
+                main.filters.find(d => d.label === label).sign = condition
+                main.filters.find(d => d.label === label).number = number
+                applyFilters()
+            }
+            return div
+        }
+
+
+        function buildData(json, layerName, color) {
+            json
+                .forEach(d => {
+                    d.lat = +d['Latitude']
+                    d.lon = +d['Longitude']
+                })
+            const bounds = new mapboxgl.LngLatBounds();
+            const names = json.map(d => {
+                return `${d['Owner Name']}`
+            }).filter(d => d !== "")
+            const pins = json
+                .map(pin => {
+                    const { lat, lon, type } = pin
+                    // const colorIndex = Array.from(main.filters).indexOf(type)
+                    bounds.extend([lon, lat])
+                    const id = `${pin['Owner Name']}`;
+                    const numberOfProperties =
+                        names.filter(name => name === id).length
+                    const radius = numberOfProperties > 1 ? numberOfProperties * 2 + 5 : 5
+                    return turf.point([lon, lat], {
+                        color,
+                        name,
+                        type,
+                        id,
+                        radius: radius > 15 ? 15 : radius,
+                        numberOfProperties: numberOfProperties > 1 ? numberOfProperties : "",
+                        ...pin,
+                        'Nombre Logements': +pin['Nombre Logements'],
+                    });
+                });
+            console.log('pins==>', pins);
+
+            main.data.push(...pins)
+            map.fitBounds(bounds, { padding: 50 })
+
+            autocomplete(document.getElementById("myInput"), pins);
+
+            return pins
+        }
+
+        function filterData() {
+            const pins = main.data.filter(pin => {
+                const filter = Array.from(main.filters)
+                return filter.includes(pin.properties.type)
+            })
+            map.getSource("main").setData(turf.featureCollection(pins))
+        }
+
+        function buildSwitcher(child, action, checked = true) {
+
+            const div = document.createElement("div")
+            div.className = "switcher-div"
+
+            const label = document.createElement("label")
+            label.className = "switch"
+
+            const checkbox = document.createElement("input")
+            checkbox.type = "checkbox"
+            checkbox.checked = checked
+            checkbox.addEventListener("input", () => {
+                if (typeof action === "function") {
+                    action(checkbox.checked)
+                }
+            })
+
+            const span = document.createElement("span")
+            span.className = "slider round"
+
+            const text = document.createElement("div")
+            text.appendChild(child)
+
+            label.appendChild(checkbox)
+            label.appendChild(span)
+
+            div.appendChild(label)
+            div.appendChild(text)
+
+            return div
+        }
+
+
+        function autocomplete(inp, data) {
+
+
+            const arr = data.map(d => {
+                return {
+                    ...d,
+                    text: `${d.properties['Owner Name']}<br>${d.properties['Address']}`
+                }
+            })
+
+            /*the autocomplete function takes two arguments,
+            the text field element and an array of possible autocompleted values:*/
+            var currentFocus;
+            /*execute a function when someone writes in the text field:*/
+            inp.addEventListener("input", function (e) {
+                var a, b, i, val = this.value;
+                /*close any already open lists of autocompleted values*/
+                closeAllLists();
+                if (!val) { return false; }
+                currentFocus = -1;
+                /*create a DIV element that will contain the items (values):*/
+                a = document.createElement("DIV");
+                a.setAttribute("id", this.id + "autocomplete-list");
+                a.setAttribute("class", "autocomplete-items");
+                /*append the DIV element as a child of the autocomplete container:*/
+                this.parentNode.appendChild(a);
+                /*for each item in the array...*/
+                for (let i = 0; i < arr.length; i++) {
+                    /*check if the item starts with the same letters as the text field value:*/
+                    //if (arr[i].substr(0, val.length).toUpperCase() == val.toUpperCase()) {
+                    const text = arr[i].text
+
+                    if (text.toUpperCase().includes(val.toUpperCase())) {
+                        /*create a DIV element for each matching element:*/
+                        b = document.createElement("DIV");
+                        /*make the matching letters bold:*/
+                        b.innerHTML = text.replace(new RegExp(val, 'gi'), (match) => `<strong>${match}</strong>`);
+                        /*insert a input field that will hold the current array item's value:*/
+                        b.innerHTML += "<input type='hidden' value='" + text + "'>";
+                        /*execute a function when someone clicks on the item value (DIV element):*/
+                        b.addEventListener("click", function (e) {
+                            /*insert the value for the autocomplete text field:*/
+                            inp.value = this.getElementsByTagName("input")[0].value.replace("<br>", " ");
+                            /*close the list of autocompleted values,
+                            (or any other open lists of autocompleted values:*/
+
+                            console.log('arr[i]', i, arr);
+                            map.flyTo({
+                                center: [arr[i].geometry.coordinates[0], arr[i].geometry.coordinates[1]],
+                                zoom: 18
+                            });
+
+                            closeAllLists();
+                        });
+                        a.appendChild(b);
+                    }
+                }
+            });
+            /*execute a function presses a key on the keyboard:*/
+            inp.addEventListener("keydown", function (e) {
+                var x = document.getElementById(this.id + "autocomplete-list");
+                if (x) x = x.getElementsByTagName("div");
+                if (e.keyCode == 40) {
+                    /*If the arrow DOWN key is pressed,
+                    increase the currentFocus variable:*/
+                    currentFocus++;
+                    /*and and make the current item more visible:*/
+                    addActive(x);
+                } else if (e.keyCode == 38) { //up
+                    /*If the arrow UP key is pressed,
+                    decrease the currentFocus variable:*/
+                    currentFocus--;
+                    /*and and make the current item more visible:*/
+                    addActive(x);
+                } else if (e.keyCode == 13) {
+                    /*If the ENTER key is pressed, prevent the form from being submitted,*/
+                    e.preventDefault();
+                    if (currentFocus > -1) {
+                        /*and simulate a click on the "active" item:*/
+                        if (x) x[currentFocus].click();
+                    }
+                }
+            });
+            function addActive(x) {
+                /*a function to classify an item as "active":*/
+                if (!x) return false;
+                /*start by removing the "active" class on all items:*/
+                removeActive(x);
+                if (currentFocus >= x.length) currentFocus = 0;
+                if (currentFocus < 0) currentFocus = (x.length - 1);
+                /*add class "autocomplete-active":*/
+                x[currentFocus].classList.add("autocomplete-active");
+            }
+            function removeActive(x) {
+                /*a function to remove the "active" class from all autocomplete items:*/
+                for (var i = 0; i < x.length; i++) {
+                    x[i].classList.remove("autocomplete-active");
+                }
+            }
+            function closeAllLists(elmnt) {
+                /*close all autocomplete lists in the document,
+                except the one passed as an argument:*/
+                var x = document.getElementsByClassName("autocomplete-items");
+                for (var i = 0; i < x.length; i++) {
+                    if (elmnt != x[i] && elmnt != inp) {
+                        x[i].parentNode.removeChild(x[i]);
+                    }
+                }
+            }
+            /*execute a function when someone clicks in the document:*/
+            document.addEventListener("click", function (e) {
+                closeAllLists(e.target);
+            });
+        }
+
+    </script>
+</body>
+
+</html>
